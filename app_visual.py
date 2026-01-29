@@ -30,7 +30,8 @@ if 'chat_history' not in st.session_state:
 
 # --- FUNCIONES DE IA (MOTOR) ---
 def consultar_gemini(prompt, imagen=None):
-    url = f"https://generativelanguage.googleapis.com/v1beta/models/{MODELO}:generateContent?key={API_KEY}"
+    # Aseguramos que el modelo sea el correcto
+    url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={API_KEY}"
     headers = {'Content-Type': 'application/json'}
     
     parts = [{"text": prompt}]
@@ -43,10 +44,17 @@ def consultar_gemini(prompt, imagen=None):
     
     try:
         response = requests.post(url, headers=headers, data=json.dumps(payload))
-        if response.status_code == 200:
-            return response.json()['candidates'][0]['content']['parts'][0]['text']
-        return None
-    except:
+        
+        # --- AQUÍ ESTÁ EL CHIVATO (DEBUG) ---
+        if response.status_code != 200:
+            st.error(f"🚨 Error de IA ({response.status_code}):")
+            st.code(response.text) # Muestra el mensaje técnico de Google
+            return None
+        # ------------------------------------
+
+        return response.json()['candidates'][0]['content']['parts'][0]['text']
+    except Exception as e:
+        st.error(f"💥 Error de Conexión: {e}")
         return None
 
 def analizar_comida(imagen, perfil):
@@ -219,3 +227,4 @@ else:
         vista_dashboard(st.session_state.usuario, perfil)
     else:
         vista_onboarding(st.session_state.usuario)
+
