@@ -104,3 +104,49 @@ def ver_historial(user_id):
     filas = c.fetchall()
     conn.close()
     return filas
+
+# --- GESTIÓN DE EXPEDIENTES (PERFILES) ---
+
+def verificar_expediente(usuario):
+    """Revisa si el usuario ya llenó su ficha técnica"""
+    conn = init_connection()
+    cur = conn.cursor()
+    cur.execute("SELECT * FROM expedientes WHERE usuario_id = %s", (usuario,))
+    resultado = cur.fetchone()
+    cur.close()
+    conn.close()
+    return resultado is not None
+
+def crear_expediente(usuario, nombre, edad, peso, altura, genero, objetivo, actividad):
+    """Crea la ficha técnica inicial del usuario"""
+    conn = init_connection()
+    cur = conn.cursor()
+    try:
+        cur.execute("""
+            INSERT INTO expedientes 
+            (usuario_id, nombre_completo, edad, peso, altura_cm, genero, objetivo, nivel_actividad)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+        """, (usuario, nombre, edad, peso, altura, genero, objetivo, actividad))
+        conn.commit()
+        return True
+    except Exception as e:
+        print(f"Error creando expediente: {e}")
+        return False
+    finally:
+        cur.close()
+        conn.close()
+
+def obtener_datos_perfil(usuario):
+    """Recupera los datos para alimentar a la IA"""
+    conn = init_connection()
+    cur = conn.cursor()
+    cur.execute("SELECT edad, peso, altura_cm, objetivo, genero FROM expedientes WHERE usuario_id = %s", (usuario,))
+    data = cur.fetchone()
+    cur.close()
+    conn.close()
+    if data:
+        return {
+            "edad": data[0], "peso": data[1], "altura": data[2], 
+            "objetivo": data[3], "genero": data[4]
+        }
+    return None
