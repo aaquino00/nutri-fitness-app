@@ -5,7 +5,7 @@ import base64
 import base_datos
 import pandas as pd
 
-# --- CONFIGURACIÓN VISUAL (ALEGRE Y PROFESIONAL) ---
+# --- CONFIGURACIÓN VISUAL ---
 st.set_page_config(
     page_title="Comando Fitness 2.0",
     page_icon="🥑",
@@ -20,7 +20,8 @@ except:
     st.error("⚠️ Falta configurar la API Key en secrets.toml")
     st.stop()
 
-MODELO = "gemini-1.5-flash"
+# ✅ CAMBIO CLAVE: Usamos la versión específica '001' que es más estable
+MODELO = "gemini-1.5-flash-001"
 
 # --- ESTADO DE SESIÓN ---
 if 'usuario' not in st.session_state:
@@ -30,8 +31,7 @@ if 'chat_history' not in st.session_state:
 
 # --- FUNCIONES DE IA (MOTOR) ---
 def consultar_gemini(prompt, imagen=None):
-    # Aseguramos que el modelo sea el correcto
-    url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={API_KEY}"
+    url = f"https://generativelanguage.googleapis.com/v1beta/models/{MODELO}:generateContent?key={API_KEY}"
     headers = {'Content-Type': 'application/json'}
     
     parts = [{"text": prompt}]
@@ -44,41 +44,42 @@ def consultar_gemini(prompt, imagen=None):
     
     try:
         response = requests.post(url, headers=headers, data=json.dumps(payload))
-        
-        # --- AQUÍ ESTÁ EL CHIVATO (DEBUG) ---
-        if response.status_code != 200:
-            st.error(f"🚨 Error de IA ({response.status_code}):")
-            st.code(response.text) # Muestra el mensaje técnico de Google
-            return None
-        # ------------------------------------
-
-        return response.json()['candidates'][0]['content']['parts'][0]['text']
+        if response.status_code == 200:
+            return response.json()['candidates'][0]['content']['parts'][0]['text']
+        else:
+            # Si falla, devolvemos el error para verlo en pantalla
+            return f"ERROR_API: {response.status_code} - {response.text}"
     except Exception as e:
-        st.error(f"💥 Error de Conexión: {e}")
-        return None
+        return f"ERROR_TECNICO: {e}"
 
 def analizar_comida(imagen, perfil):
     prompt = f"""
-    Actúa como un nutricionista deportivo positivo y motivador.
-    Analiza la imagen de comida.
-    El usuario es: {perfil['sexo']}, {perfil['edad']} años, busca {perfil['meta']}.
+    Actúa como un nutricionista deportivo.
+    Analiza la imagen. Usuario: {perfil['sexo']}, {perfil['edad']} años, meta {perfil['meta']}.
     
-    Responde SOLO con este JSON exacto (sin texto extra):
+    Responde SOLO con este JSON (sin ```json):
     {{
         "plato": "Nombre del plato",
         "calorias_aprox": 0,
         "proteinas_g": 0,
         "carbohidratos_g": 0,
         "grasas_g": 0,
-        "consejo": "Un consejo breve y motivador ajustado a su meta"
+        "consejo": "Consejo breve"
     }}
     """
     respuesta = consultar_gemini(prompt, imagen)
+    
+    # Verificación de errores
+    if respuesta and "ERROR_" in respuesta:
+        st.error(respuesta) # Mostrar el error técnico si ocurre
+        return None
+        
     if respuesta:
         try:
             clean = respuesta.replace("```json", "").replace("```", "").strip()
             return json.loads(clean)
         except:
+            st.error("La IA no respondió con el formato correcto.")
             return None
     return None
 
@@ -100,45 +101,60 @@ def vista_login():
                     st.session_state.usuario = u
                     st.rerun()
                 else:
-                    st.error("Usuario o contraseña incorrectos")
+                    st.error("Credenciales incorrectas")
         
         with tab2:
             nu = st.text_input("Nuevo Usuario")
             np = st.text_input("Nueva Contraseña", type="password")
             if st.button("✨ Crear Cuenta", use_container_width=True):
                 if base_datos.crear_usuario(nu, np):
-                    st.success("¡Bienvenido al equipo! Ahora ingresa.")
+                    st.success("Cuenta creada. Ahora ingresa.")
                 else:
                     st.warning("El usuario ya existe.")
 
 def vista_onboarding(usuario):
     st.markdown("## 📋 Ficha de Reclutamiento")
-    st.info("Para que la IA sea precisa, necesitamos calibrar el motor con tus datos.")
+    st.info("Calibrando motor de IA...")
     
     with st.form("form_perfil"):
         col1, col2 = st.columns(2)
-        nombre = col1.text_input("Nombre o Apodo")
-        sexo = col2.selectbox("Sexo Biológico", ["Hombre", "Mujer"])
+        nombre = col1.text_input("Nombre")
+        sexo = col2.selectbox("Sexo", ["Hombre", "Mujer"])
         edad = col1.number_input("Edad", 15, 90, 30)
         altura = col2.number_input("Altura (cm)", 140, 220, 170)
-        peso = col1.number_input("Peso Actual (kg)", 40.0, 200.0, 70.0)
-        actividad = col2.select_slider("Nivel de Actividad", ["Sedentario", "Ligero", "Moderado", "Atleta"])
-        meta = st.selectbox("¿Cuál es tu Misión?", ["Perder Grasa", "Ganar Músculo", "Mantenimiento", "Rendimiento"])
+        peso = col1.number_input("Peso (kg)", 40.0, 200.0, 70.0)
+        actividad = col2.select_slider("Actividad", ["Sedentario", "Ligero", "Moderado", "Atleta"])
+        meta = st.selectbox("Misión", ["Perder Grasa", "Ganar Músculo", "Mantenimiento", "Rendimiento"])
         
-        if st.form_submit_button("💾 Guardar y Acceder al Sistema", type="primary"):
+        if st.form_submit_button("💾 Guardar Perfil"):
             if base_datos.guardar_expediente(usuario, nombre, sexo, edad, peso, altura, meta, actividad):
-                st.balloons()
                 st.rerun()
 
 def vista_dashboard(usuario, perfil):
-    # Sidebar con perfil
     with st.sidebar:
         st.title(f"Hola, {perfil['nombre']}!")
         st.caption(f"🎯 Meta: {perfil['meta']}")
-        st.metric("Peso", f"{perfil['peso']} kg")
         if st.button("Cerrar Sesión"):
             st.session_state.usuario = None
             st.rerun()
+            
+        st.divider()
+        # 🔧 HERRAMIENTA DE DIAGNÓSTICO
+        with st.expander("🔧 Diagnóstico Técnico"):
+            if st.button("Probar Conexión IA"):
+                try:
+                    url_test = f"[https://generativelanguage.googleapis.com/v1beta/models?key=](https://generativelanguage.googleapis.com/v1beta/models?key=){API_KEY}"
+                    resp = requests.get(url_test)
+                    if resp.status_code == 200:
+                        modelos = resp.json()
+                        st.success("✅ Conexión Exitosa")
+                        # Buscamos si el modelo que queremos está en la lista
+                        nombres = [m['name'] for m in modelos.get('models', [])]
+                        st.write("Modelos disponibles:", nombres)
+                    else:
+                        st.error(f"Error conectando: {resp.status_code}")
+                except Exception as e:
+                    st.error(f"Error: {e}")
 
     # Tabs principales
     t1, t2, t3, t4 = st.tabs(["📸 Escáner IA", "🏋️ Rutinas", "💬 Coach IA", "📈 Progreso"])
@@ -146,85 +162,64 @@ def vista_dashboard(usuario, perfil):
     # 1. ESCÁNER
     with t1:
         st.header("Escáner Nutricional")
-        col_cam, col_upl = st.columns(2)
-        img_cam = col_cam.camera_input("Cámara")
-        img_upl = col_upl.file_uploader("Subir foto", type=["jpg", "png", "jpeg"])
+        img_file = st.file_uploader("Sube una foto de tu comida", type=["jpg", "png", "jpeg"])
         
-        imagen = img_cam if img_cam else img_upl
-        
-        if imagen:
+        if img_file:
+            st.image(img_file, width=300)
             if st.button("🔍 Analizar Plato", type="primary"):
-                with st.spinner("La IA está calculando macros..."):
-                    datos = analizar_comida(imagen.getvalue(), perfil)
+                with st.spinner("Analizando con Visión Artificial..."):
+                    datos = analizar_comida(img_file.getvalue(), perfil)
                     if datos:
                         c1, c2, c3, c4 = st.columns(4)
                         c1.metric("Kcal", datos['calorias_aprox'])
                         c2.metric("Prot", f"{datos['proteinas_g']}g")
                         c3.metric("Carb", f"{datos['carbohidratos_g']}g")
                         c4.metric("Gras", f"{datos['grasas_g']}g")
-                        
                         st.success(f"🍽️ {datos['plato']}")
-                        st.info(f"💡 Coach dice: {datos['consejo']}")
-                        
+                        st.info(f"💡 {datos['consejo']}")
                         base_datos.guardar_comida(usuario, datos)
-                    else:
-                        st.error("No pude identificar comida clara.")
 
     # 2. RUTINAS
     with t2:
         st.header("Generador de Rutinas")
-        col1, col2 = st.columns(2)
-        dias = col1.slider("Días disponibles", 2, 6, 3)
-        lugar = col2.selectbox("Lugar", ["Gimnasio", "Casa (sin equipo)", "Parque"])
-        
-        if st.button("⚡ Generar Rutina Semanal"):
-            with st.spinner("Diseñando plan táctico..."):
-                prompt = f"Crea una rutina de {dias} días para {perfil['sexo']}, objetivo {perfil['meta']}, en {lugar}. Formato tabla Markdown."
+        dias = st.slider("Días de entrenamiento", 1, 7, 3)
+        if st.button("Generar Rutina"):
+            with st.spinner("Creando plan..."):
+                prompt = f"Crea rutina de {dias} días para {perfil['sexo']}, meta {perfil['meta']}."
                 rutina = consultar_gemini(prompt)
                 st.markdown(rutina)
 
     # 3. CHAT
     with t3:
-        st.header("Chat con la Especialista")
+        st.header("Chat Coach")
         for msg in st.session_state.chat_history:
             with st.chat_message(msg["role"]):
                 st.write(msg["content"])
-                
-        if prompt := st.chat_input("Pregunta sobre dieta o ejercicio..."):
+        if prompt := st.chat_input("Consulta..."):
             st.session_state.chat_history.append({"role": "user", "content": prompt})
             with st.chat_message("user"):
                 st.write(prompt)
-            
             with st.chat_message("assistant"):
-                contexto = f"Eres coach fitness. El usuario es {perfil['sexo']}, {perfil['edad']} años, meta: {perfil['meta']}."
-                resp = consultar_gemini(f"{contexto}. Pregunta: {prompt}")
+                resp = consultar_gemini(f"Eres coach. Usuario: {perfil['meta']}. Responde: {prompt}")
                 st.write(resp)
             st.session_state.chat_history.append({"role": "assistant", "content": resp})
 
     # 4. PROGRESO
     with t4:
-        st.header("Métricas de Evolución")
+        st.header("Tus Métricas")
         historial = base_datos.obtener_historial(usuario)
         if historial:
             df = pd.DataFrame(historial, columns=["Fecha", "Plato", "Kcal", "Prot", "Carb", "Gras"])
-            df['Fecha'] = pd.to_datetime(df['Fecha'])
-            
-            st.subheader("Calorías Diarias")
-            st.bar_chart(df, x="Fecha", y="Kcal", color="#FF4B4B")
-            
-            st.subheader("Historial Reciente")
-            st.dataframe(df, use_container_width=True)
+            st.dataframe(df)
         else:
-            st.info("Aún no hay datos. ¡Empieza escaneando tu primera comida!")
+            st.info("Sin datos aún.")
 
 # --- CONTROLADOR PRINCIPAL ---
 if not st.session_state.usuario:
     vista_login()
 else:
-    # Verificamos si ya llenó el onboarding
     perfil = base_datos.obtener_perfil(st.session_state.usuario)
     if perfil:
         vista_dashboard(st.session_state.usuario, perfil)
     else:
         vista_onboarding(st.session_state.usuario)
-
