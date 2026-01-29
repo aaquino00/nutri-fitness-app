@@ -142,7 +142,7 @@ def chat_especialista(historial, info_comida, perfil=None):
 # --- BARRA LATERAL ---
 with st.sidebar:
     # 🔧 CORREGIDO: URL de imagen limpia
-    st.image("[https://cdn-icons-png.flaticon.com/512/2964/2964514.png](https://cdn-icons-png.flaticon.com/512/2964/2964514.png)", width=50) 
+    st.image("https://cdn-icons-png.flaticon.com/512/2964/2964514.png](https://cdn-icons-png.flaticon.com/512/2964/2964514.png)", width=50) 
     st.markdown("### Comando Fitness")
     
     if 'usuario_actual' in st.session_state and st.session_state.usuario_actual:
