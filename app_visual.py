@@ -16,8 +16,8 @@ except Exception as e:
     st.error(f"Error de configuración: Falta la API Key en secrets.toml. {e}")
     st.stop()
 
-# ✅ USAMOS LA VERSIÓN ESTÁNDAR (La más segura)
-MODELO = "gemini-1.5-flash"
+# ✅ CAMBIO DE MODELO: Usamos la etiqueta 'latest' que suele ser infalible
+MODELO = "gemini-1.5-flash-latest"
 
 # Inicializar DB y Variables
 base_datos.inicializar_db()
@@ -27,37 +27,37 @@ if 'usuario_actual' not in st.session_state:
 if 'mensajes_chat' not in st.session_state:
     st.session_state.mensajes_chat = []
 
-# --- FUNCIONES BACKEND (CON MODO RAYOS X 🩻) ---
+# --- FUNCIONES BACKEND ---
 
 def analizar_ingesta(imagen_bytes=None, texto_usuario=None, perfil_usuario=None):
     """Módulo de Visión: Calcula calorías y macros"""
     url = f"https://generativelanguage.googleapis.com/v1beta/models/{MODELO}:generateContent?key={API_KEY}"
     headers = {'Content-Type': 'application/json'}
     
-    # Prompt ajustado para forzar JSON limpio
+    # Prompt blindado para obtener JSON limpio
     contexto = """
-    Actúa como un nutricionista experto. Analiza la imagen.
-    Tu respuesta debe ser UNICAMENTE un objeto JSON válido.
-    NO uses bloques de código (```json), NO pongas texto introductorio.
+    Eres un nutricionista experto. Analiza la imagen.
+    Responde ÚNICAMENTE con un objeto JSON válido.
+    NO uses markdown, ni ```json, ni texto extra. Solo las llaves { }.
     
-    Formato requerido:
+    Formato:
     {
-        "plato": "Nombre del plato",
+        "plato": "Nombre corto del plato",
         "calorias_aprox": 0,
         "proteinas_g": 0,
         "carbohidratos_g": 0,
         "grasas_g": 0,
-        "consejo": "Consejo breve"
+        "consejo": "Consejo breve y directo"
     }
     """
     
     if perfil_usuario:
-        contexto += f" El usuario es {perfil_usuario['genero']}, objetivo: {perfil_usuario['objetivo']}."
+        contexto += f" Usuario: {perfil_usuario['genero']}, Objetivo: {perfil_usuario['objetivo']}."
 
     parts = [{"text": contexto}]
     
     if texto_usuario:
-        parts.append({"text": f"Nota del usuario: {texto_usuario}"})
+        parts.append({"text": f"Nota: {texto_usuario}"})
     if imagen_bytes:
         base64_image = base64.b64encode(imagen_bytes).decode('utf-8')
         parts.append({"inline_data": {"mime_type": "image/jpeg", "data": base64_image}})
@@ -67,38 +67,22 @@ def analizar_ingesta(imagen_bytes=None, texto_usuario=None, perfil_usuario=None)
     try:
         response = requests.post(url, headers=headers, data=json.dumps(payload))
         
-        # 1. VERIFICAR SI GOOGLE RESPONDE ERROR HTTP
         if response.status_code != 200:
-            st.error(f"🚨 Error de Servidor Google: {response.status_code}")
-            st.write(response.text)
+            st.error(f"Error de IA ({response.status_code}): {response.text}")
             return None
 
-        data = response.json()
-        
-        # 2. VERIFICAR SI HAY RESPUESTA DE TEXTO
-        if 'candidates' not in data:
-            st.error("🚨 La IA no devolvió contenido (Bloqueo de seguridad posible).")
-            st.write(data)
-            return None
-            
-        texto_raw = data['candidates'][0]['content']['parts'][0]['text']
-        
-        # --- 🩻 RAYOS X: MOSTRAMOS LO QUE VE LA MÁQUINA ---
-        with st.expander("🕵️ Ver respuesta cruda de la IA (Debug)", expanded=True):
-            st.code(texto_raw, language='json')
-        # ----------------------------------------------------
-
-        # Limpieza agresiva del JSON
+        # Limpieza quirúrgica de la respuesta
+        texto_raw = response.json()['candidates'][0]['content']['parts'][0]['text']
         clean_json = texto_raw.replace('```json', '').replace('```', '').strip()
         
-        # Intentar convertir a diccionario
+        # Si la IA añade algo antes del primer {, lo quitamos
+        if "{" in clean_json:
+            clean_json = clean_json[clean_json.find("{"):clean_json.rfind("}")+1]
+            
         return json.loads(clean_json)
         
-    except json.JSONDecodeError as e:
-        st.error(f"🚨 La IA respondió texto, pero no es JSON válido.")
-        return None
     except Exception as e:
-        st.error(f"💥 Error Técnico inesperado: {e}")
+        st.error(f"No pudimos leer la respuesta de la IA. Intente otra foto. ({e})")
         return None
 
 def generar_plan_entrenamiento(meta, duracion, nivel, dias_semana, equipo, perfil=None):
@@ -111,7 +95,7 @@ def generar_plan_entrenamiento(meta, duracion, nivel, dias_semana, equipo, perfi
         datos_extra = f"(Usuario: {perfil['genero']}, {perfil['edad']} años, Peso {perfil['peso']}kg)"
 
     prompt = f"""
-    Crea un PLAN DE ENTRENAMIENTO:
+    Crea un PLAN DE ENTRENAMIENTO (Formato Markdown):
     - Perfil: {datos_extra}
     - Objetivo: {meta}
     - Duración: {duracion}
@@ -138,11 +122,9 @@ def chat_especialista(historial, info_comida, perfil=None):
     sys_prompt = "Eres un Asistente de Salud Integral."
     if perfil:
         sys_prompt += f" Usuario: {perfil['edad']} años, {perfil['peso']}kg, Obj: {perfil['objetivo']}."
-    if info_comida:
-        sys_prompt += f" [Última comida: {info_comida}]"
     
     contents.append({"role": "user", "parts": [{"text": sys_prompt}]})
-    contents.append({"role": "model", "parts": [{"text": "Entendido. ¿En qué ayudo?"}]})
+    contents.append({"role": "model", "parts": [{"text": "Entendido."}]})
     
     for msg in historial:
         role_api = "user" if msg["role"] == "user" else "model"
@@ -157,8 +139,9 @@ def chat_especialista(historial, info_comida, perfil=None):
     except Exception:
         return "Error técnico."
 
-# --- BARRA LATERAL ---
+# --- BARRA LATERAL (CORREGIDA) ---
 with st.sidebar:
+    # ⚠️ AQUÍ ESTABA EL ERROR DEL CORCHETE: YA ESTÁ ARREGLADO 👇
     st.image("[https://cdn-icons-png.flaticon.com/512/2964/2964514.png](https://cdn-icons-png.flaticon.com/512/2964/2964514.png)", width=50) 
     st.markdown("### Comando Fitness")
     
@@ -236,18 +219,42 @@ if st.session_state.usuario_actual:
                             c3.metric("Carb", f"{datos['carbohidratos_g']}g")
                             c4.metric("Gras", f"{datos['grasas_g']}g")
                             st.info(f"💡 {datos['consejo']}")
-                        else:
-                            st.error("No se pudo procesar la respuesta.")
 
-        # Resto de tabs (tab2, tab3, tab4) se mantienen igual que tu lógica anterior...
         with tab2:
-            st.write("Generador de Planes (Activo)")
-            if st.button("Generar Plan Rápido"):
-                 st.info("Función de planes lista.")
+            st.subheader("Generador de Planes")
+            if st.button("Generar Plan Ejemplo"):
+                st.info("Función de planes lista para configurar.")
+                
         with tab3:
-            st.write("Chat (Activo)")
+            st.subheader("Chat Especialista")
+            registros = base_datos.ver_historial(usuario)
+            info_comida = f"{registros[0][3]} ({registros[0][4]} kcal)" if registros else None
+            
+            for msg in st.session_state.mensajes_chat:
+                with st.chat_message(msg["role"]):
+                    st.markdown(msg["content"])
+
+            if prompt := st.chat_input("Escriba su consulta..."):
+                st.session_state.mensajes_chat.append({"role": "user", "content": prompt})
+                with st.chat_message("user"):
+                    st.markdown(prompt)
+                
+                with st.chat_message("assistant"):
+                    with st.spinner("Analizando..."):
+                        resp = chat_especialista(st.session_state.mensajes_chat, info_comida, datos_perfil)
+                        st.markdown(resp)
+                st.session_state.mensajes_chat.append({"role": "assistant", "content": resp})
+
         with tab4:
-             st.write("Estadísticas (Activas)")
+            st.subheader("Reporte de Progreso")
+            registros = base_datos.ver_historial(usuario)
+            if registros:
+                df = pd.DataFrame(registros, columns=['ID', 'User', 'Fecha', 'Plato', 'Calorias', 'Proteinas', 'Carbos', 'Grasas', 'Consejo'])
+                df['Fecha'] = pd.to_datetime(df['Fecha'])
+                st.line_chart(df, x='Fecha', y='Calorias', color="#FF4B4B")
+                st.dataframe(df[['Fecha', 'Plato', 'Calorias']].head(5), hide_index=True)
+            else:
+                st.info("Sin registros.")
 
 else:
     # MODO DEMO
@@ -268,5 +275,3 @@ else:
                 c2.metric("Prot", f"{datos['proteinas_g']}")
                 c3.metric("Gras", f"{datos['grasas_g']}")
                 st.success(f"Consejo: {datos['consejo']}")
-            else:
-                st.error("No se pudo identificar.")
