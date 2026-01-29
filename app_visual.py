@@ -29,7 +29,7 @@ if 'mensajes_chat' not in st.session_state:
 # --- FUNCIONES BACKEND (CONEXIÓN CON IA) ---
 
 def analizar_ingesta(imagen_bytes=None, texto_usuario=None, perfil_usuario=None):
-    """Módulo de Visión: Calcula calorías y macros"""
+    """Módulo de Visión: Calcula calorías y macros (MODO DIAGNÓSTICO)"""
     url = f"https://generativelanguage.googleapis.com/v1beta/models/{MODELO}:generateContent?key={API_KEY}"
     headers = {'Content-Type': 'application/json'}
     
@@ -40,10 +40,7 @@ def analizar_ingesta(imagen_bytes=None, texto_usuario=None, perfil_usuario=None)
     """
     
     if perfil_usuario:
-        contexto += f"""
-        IMPORTANTE: El usuario es {perfil_usuario['genero']}, pesa {perfil_usuario['peso']}kg y su objetivo es {perfil_usuario['objetivo']}.
-        Ajusta el campo 'consejo' basándote en estos datos.
-        """
+        contexto += f" El usuario es {perfil_usuario['genero']}, objetivo: {perfil_usuario['objetivo']}."
 
     parts = [{"text": contexto}]
     
@@ -57,12 +54,20 @@ def analizar_ingesta(imagen_bytes=None, texto_usuario=None, perfil_usuario=None)
     
     try:
         response = requests.post(url, headers=headers, data=json.dumps(payload))
-        if response.status_code == 200:
-            texto = response.json()['candidates'][0]['content']['parts'][0]['text']
-            clean_json = texto.replace('```json', '').replace('```', '').strip()
-            return json.loads(clean_json)
-        return None
-    except Exception:
+        
+        # --- AQUÍ ESTÁ EL CHIVATO ---
+        if response.status_code != 200:
+            st.error(f"🚨 Error de IA: {response.status_code}")
+            st.code(response.text) # Nos mostrará qué dijo Google
+            return None
+        # -----------------------------
+
+        texto = response.json()['candidates'][0]['content']['parts'][0]['text']
+        clean_json = texto.replace('```json', '').replace('```', '').strip()
+        return json.loads(clean_json)
+        
+    except Exception as e:
+        st.error(f"💥 Error Técnico: {e}")
         return None
 
 def generar_plan_entrenamiento(meta, duracion, nivel, dias_semana, equipo, perfil=None):
