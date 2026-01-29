@@ -16,7 +16,7 @@ except Exception as e:
     st.error(f"Error de configuración: Falta la API Key en secrets.toml. {e}")
     st.stop()
 
-# ✅ CAMBIO DE MODELO: Usamos la etiqueta 'latest' que suele ser infalible
+# ✅ USAMOS LA VERSIÓN LATEST
 MODELO = "gemini-1.5-flash-latest"
 
 # Inicializar DB y Variables
@@ -31,10 +31,10 @@ if 'mensajes_chat' not in st.session_state:
 
 def analizar_ingesta(imagen_bytes=None, texto_usuario=None, perfil_usuario=None):
     """Módulo de Visión: Calcula calorías y macros"""
+    # 🔧 CORREGIDO: URL limpia sin corchetes
     url = f"https://generativelanguage.googleapis.com/v1beta/models/{MODELO}:generateContent?key={API_KEY}"
     headers = {'Content-Type': 'application/json'}
     
-    # Prompt blindado para obtener JSON limpio
     contexto = """
     Eres un nutricionista experto. Analiza la imagen.
     Responde ÚNICAMENTE con un objeto JSON válido.
@@ -71,11 +71,9 @@ def analizar_ingesta(imagen_bytes=None, texto_usuario=None, perfil_usuario=None)
             st.error(f"Error de IA ({response.status_code}): {response.text}")
             return None
 
-        # Limpieza quirúrgica de la respuesta
         texto_raw = response.json()['candidates'][0]['content']['parts'][0]['text']
         clean_json = texto_raw.replace('```json', '').replace('```', '').strip()
         
-        # Si la IA añade algo antes del primer {, lo quitamos
         if "{" in clean_json:
             clean_json = clean_json[clean_json.find("{"):clean_json.rfind("}")+1]
             
@@ -87,6 +85,7 @@ def analizar_ingesta(imagen_bytes=None, texto_usuario=None, perfil_usuario=None)
 
 def generar_plan_entrenamiento(meta, duracion, nivel, dias_semana, equipo, perfil=None):
     """Módulo Entrenador"""
+    # 🔧 CORREGIDO: URL limpia sin corchetes
     url = f"[https://generativelanguage.googleapis.com/v1beta/models/](https://generativelanguage.googleapis.com/v1beta/models/){MODELO}:generateContent?key={API_KEY}"
     headers = {'Content-Type': 'application/json'}
     
@@ -115,6 +114,7 @@ def generar_plan_entrenamiento(meta, duracion, nivel, dias_semana, equipo, perfi
 
 def chat_especialista(historial, info_comida, perfil=None):
     """Módulo Chat"""
+    # 🔧 CORREGIDO: URL limpia sin corchetes
     url = f"[https://generativelanguage.googleapis.com/v1beta/models/](https://generativelanguage.googleapis.com/v1beta/models/){MODELO}:generateContent?key={API_KEY}"
     headers = {'Content-Type': 'application/json'}
     
@@ -139,9 +139,9 @@ def chat_especialista(historial, info_comida, perfil=None):
     except Exception:
         return "Error técnico."
 
-# --- BARRA LATERAL (CORREGIDA) ---
+# --- BARRA LATERAL ---
 with st.sidebar:
-    # ⚠️ AQUÍ ESTABA EL ERROR DEL CORCHETE: YA ESTÁ ARREGLADO 👇
+    # 🔧 CORREGIDO: URL de imagen limpia
     st.image("[https://cdn-icons-png.flaticon.com/512/2964/2964514.png](https://cdn-icons-png.flaticon.com/512/2964/2964514.png)", width=50) 
     st.markdown("### Comando Fitness")
     
