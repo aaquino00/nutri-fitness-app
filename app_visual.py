@@ -7,7 +7,7 @@ import pandas as pd
 from PIL import Image
 
 # --- CONFIGURACIÓN ---
-st.set_page_config(page_title="Comando Fitness IA", page_icon="🛡️", layout="wide")
+st.set_page_config(page_title="Comando Fitness IA ParaguaYy", page_icon="🛡️", layout="wide")
 
 # 🔑 API KEY BLINDADA
 try:
